@@ -1,9 +1,7 @@
 """
-Command-line interface for ipa-toolkit.
+`ipa-toolkit` 的命令行入口模块。
 
-The CLI collects high-level options (bundle id/version/display name) and a list
-of generic Info.plist operations (set/delete/array ops), then calls into
-`ipa_toolkit.ipa.resign_ipa`.
+负责收集重签名参数与 `Info.plist` 操作参数，并调用 `ipa_toolkit.ipa.resign_ipa`。
 """
 
 import argparse
@@ -15,6 +13,7 @@ from .types import Op
 
 
 def _add_op(ops: list[Op], scope: str, kind: str, spec: str) -> None:
+    """将一条命令行参数规范转换为内部 `Op` 并追加到列表。"""
     if kind in ("delete",):
         if not spec:
             raise SystemExit(f"Error: missing KEY_PATH for {kind}")
@@ -30,6 +29,7 @@ def _add_op(ops: list[Op], scope: str, kind: str, spec: str) -> None:
 
 
 def _add_set_variants(parser: argparse.ArgumentParser, name: str, help_text: str) -> None:
+    """注册支持 all/main/ext 作用域的“设置类”参数。"""
     parser.add_argument(name, action="append", default=[], metavar="KEY_PATH=VALUE", help=help_text)
     parser.add_argument(f"{name}-main", action="append", default=[], metavar="KEY_PATH=VALUE",
                         help=f"{help_text} (only main app)")
@@ -38,6 +38,7 @@ def _add_set_variants(parser: argparse.ArgumentParser, name: str, help_text: str
 
 
 def _add_delete_variants(parser: argparse.ArgumentParser, name: str, help_text: str) -> None:
+    """注册支持 all/main/ext 作用域的“删除类”参数。"""
     parser.add_argument(name, action="append", default=[], metavar="KEY_PATH", help=help_text)
     parser.add_argument(f"{name}-main", action="append", default=[], metavar="KEY_PATH",
                         help=f"{help_text} (only main app)")
@@ -46,12 +47,13 @@ def _add_delete_variants(parser: argparse.ArgumentParser, name: str, help_text: 
 
 
 def _parse_ops(ns: argparse.Namespace) -> list[Op]:
+    """把 argparse 命名空间整理成统一的 `Op` 序列。"""
     ops: list[Op] = []
 
-    # Ops can be applied to:
-    # - all bundles (main app + extensions)
-    # - only the main app
-    # - only extensions/services
+    # 操作作用域支持：
+    # - all：主应用与扩展全部生效
+    # - main：仅主应用生效
+    # - ext：仅扩展/服务生效
     for spec in ns.set:
         _add_op(ops, "all", "set_string", spec)
     for spec in ns.set_main:
@@ -98,6 +100,7 @@ def _parse_ops(ns: argparse.Namespace) -> list[Op]:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构建并返回 `ipa-toolkit` 命令行参数解析器。"""
     p = argparse.ArgumentParser(
         prog="ipa-toolkit",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -109,12 +112,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p.add_argument("-i", "--input", required=True, help="Input .ipa path")
     p.add_argument("-o", "--output", default="", help="Output .ipa path (default: <input>.resigned.ipa)")
-    # Keep optional here so we can print a more actionable hint than argparse's generic "required" error.
+    # 此处不设为 argparse 的 required，便于输出更可操作的缺参提示。
     p.add_argument("-s", "--sign-identity", default="", help="Codesign identity name")
     p.add_argument("-p", "--profile", default="", help="Provisioning profile (.mobileprovision) to embed into main app")
     p.add_argument("-e", "--entitlements", default="", help="Entitlements plist to use for signing (optional)")
     p.add_argument("--main-app-name", default="",
                    help="Main app bundle name under Payload (e.g. MyApp.app) when multiple .app exist")
+    p.add_argument("--strict-entitlements", action="store_true",
+                   help="Fail when required entitlements identifiers are missing")
     p.add_argument("--keep-temp", action="store_true",
                    help="Keep temporary working directory (prints its path at the end)")
     p.add_argument("--verbose", action="store_true", help="Verbose logging")
@@ -135,6 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """CLI 入口：解析参数、校验输入并调用重签名主流程。"""
     parser = build_parser()
     ns = parser.parse_args(argv)
 
@@ -149,6 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ops = _parse_ops(ns)
 
     def _abs(p: str) -> str:
+        """将输入路径展开为绝对路径，统一后续文件校验逻辑。"""
         return os.path.abspath(os.path.expanduser(p))
 
     input_ipa = _abs(ns.input)
@@ -171,6 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         profile_path=profile,
         entitlements_path=entitlements,
         main_app_name=ns.main_app_name or "",
+        strict_entitlements=bool(ns.strict_entitlements),
         keep_temp=bool(ns.keep_temp),
         verbose=bool(ns.verbose),
         new_bundle_id=ns.bundle_id or "",

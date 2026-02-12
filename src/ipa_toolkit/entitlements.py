@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 """
-Helpers for entitlements rewrite and validation.
+签名权限（`entitlements`）重写与校验辅助模块。
 
-These helpers are kept separate from the IPA pipeline so rules around
-application identifiers / keychain groups stay focused and easier to test.
+将应用标识与钥匙串分组规则独立出来，便于复用与单元测试。
 """
 
 from collections.abc import Callable, Sequence
@@ -20,6 +19,7 @@ def adjust_entitlements_for_bundle(
     old_bundle_id: str,
     new_bundle_id: str,
 ) -> dict:
+    """按新包标识重写应用标识与钥匙串访问组前缀。"""
     if not team_id or old_bundle_id == new_bundle_id:
         return ent
 
@@ -45,6 +45,7 @@ def adjust_entitlements_for_bundle(
 
 
 def _team_id_from_app_identifier(value: object) -> str:
+    """从 `TEAMID.bundle.id` 形式的标识里提取 TEAMID。"""
     if not isinstance(value, str) or "." not in value:
         return ""
     return value.split(".", 1)[0].strip()
@@ -57,7 +58,9 @@ def validate_entitlements_for_bundle(
     old_bundle_id: str,
     new_bundle_id: str,
     profile_team_id: str,
+    require_app_identifier: bool = False,
 ) -> None:
+    """校验单个应用包的签名权限关键字段一致性。"""
     if ent is None:
         return
 
@@ -72,6 +75,11 @@ def validate_entitlements_for_bundle(
             errors.append(f"{key} must be a non-empty string")
             continue
         app_ids[key] = value.strip()
+
+    if require_app_identifier and not app_ids:
+        errors.append(
+            "missing application-identifier/com.apple.application-identifier"
+        )
 
     if len(set(app_ids.values())) > 1:
         errors.append(
@@ -124,7 +132,9 @@ def build_entitlements_by_bundle(
     explicit_entitlements: dict | None,
     profile: ProvisioningProfile | None,
     extract_entitlements: Callable[[str], dict[str, Any] | None],
+    require_app_identifier: bool = False,
 ) -> dict[str, dict | None]:
+    """为所有应用包构建最终签名权限映射（含重写与校验）。"""
     ent_by_bundle: dict[str, dict | None] = {}
 
     for bundle_path in bundles:
@@ -157,6 +167,7 @@ def build_entitlements_by_bundle(
                 old_bundle_id=old_id,
                 new_bundle_id=new_id,
                 profile_team_id=profile.team_id if profile is not None else "",
+                require_app_identifier=require_app_identifier,
             )
 
         ent_by_bundle[bundle_path] = ent

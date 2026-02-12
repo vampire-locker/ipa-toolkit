@@ -1,8 +1,7 @@
 """
-`python -m ipa_toolkit` entrypoint.
+`python -m ipa_toolkit` 命令入口。
 
-This is mainly for convenience; the installed console script `ipa-toolkit` calls
-the same `ipa_toolkit.cli:main`.
+该入口仅用于便捷调用，实际会转发到 `ipa_toolkit.cli:main`。
 """
 
 from .cli import main

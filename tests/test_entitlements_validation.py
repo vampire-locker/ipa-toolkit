@@ -90,3 +90,20 @@ def test_validate_entitlements_rejects_non_list_keychain_groups() -> None:
     except SystemExit as e:
         msg = str(e)
         assert "must be an array" in msg
+
+
+def test_validate_entitlements_strict_rejects_missing_app_identifier() -> None:
+    ent = {"keychain-access-groups": ["TEAM123.com.new.app"]}
+    try:
+        validate_entitlements_for_bundle(
+            "Payload/App.app",
+            ent,
+            old_bundle_id="com.old.app",
+            new_bundle_id="com.new.app",
+            profile_team_id="TEAM123",
+            require_app_identifier=True,
+        )
+        assert False, "expected SystemExit"
+    except SystemExit as e:
+        msg = str(e)
+        assert "missing application-identifier" in msg

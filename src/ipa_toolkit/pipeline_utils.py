@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Shared helpers for command execution and recursive signing order.
+流程通用工具：命令执行与递归签名顺序控制。
 """
 
 import os
@@ -11,6 +11,7 @@ from . import codesign
 
 
 def run_cmd(cmd: list[str], *, cwd: str | None = None, verbose: bool = False) -> None:
+    """执行外部命令，失败时抛出带 stderr 的异常。"""
     if verbose:
         if cwd:
             print(f"+ (cd {cwd}) {' '.join(cmd)}")
@@ -28,6 +29,7 @@ def sign_bundle_recursive(
     entitlements_by_bundle: dict[str, dict | None],
     verbose: bool = False,
 ) -> None:
+    """按依赖顺序递归签名应用包及其嵌套组件。"""
     plugins = os.path.join(bundle_path, "PlugIns")
     if os.path.isdir(plugins):
         for name in os.listdir(plugins):

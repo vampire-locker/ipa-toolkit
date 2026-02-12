@@ -84,6 +84,7 @@ ipa-toolkit -i INPUT.ipa -s "SIGN_IDENTITY" [选项]
 - `-p, --profile` - 要嵌入的 provisioning profile 文件（.mobileprovision）
 - `-e, --entitlements` - 自定义 entitlements.plist 文件（可选）
 - `--main-app-name` - 当 Payload 下有多个 `.app` 时，指定主应用（如 `MyApp.app`）
+- `--strict-entitlements` - 严格校验 entitlements 必需标识（缺失会报错）
 - `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展）
 - `-v, --version` - 新的版本号（CFBundleShortVersionString）
 - `-n, --build` - 新的构建号（CFBundleVersion）

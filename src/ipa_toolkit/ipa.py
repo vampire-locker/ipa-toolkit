@@ -1,21 +1,16 @@
 from __future__ import annotations
 
 """
-IPA (re)signing pipeline.
+IPA 重签名主流程模块。
 
-High-level flow:
-1) Unzip IPA into a temporary directory.
-2) Find the main app bundle under `Payload/*.app` and all nested bundles under it
-   (`.appex`, `.xpc`, nested `.app`).
-3) Apply Info.plist edits (bundle id / version / build / display name + generic
-   operations).
-4) Embed provisioning profile into the main app (optional).
-5) Determine entitlements per bundle:
-   - explicit entitlements plist if provided
-   - else try to extract from the existing signature
-   - else fall back to entitlements from the provided provisioning profile
-6) Recursively codesign frameworks/dylibs/extensions/xpc, then the bundles.
-7) Zip everything back, preserving all top-level items.
+整体步骤如下：
+1) 将 IPA 解压到临时目录。
+2) 在 `Payload/*.app` 下定位主应用，并收集其嵌套应用包（`.appex`、`.xpc`、嵌套 `.app`）。
+3) 应用 `Info.plist` 修改（包名、版本号、构建号、显示名及自定义操作）。
+4) 按需向主应用注入 `mobileprovision`。
+5) 为每个应用包生成或提取签名权限（`entitlements`）。
+6) 递归完成 Framework/动态库/扩展签名，再签应用包本体。
+7) 保留顶层目录结构并重新打包输出。
 """
 
 import os
@@ -44,6 +39,7 @@ def resign_ipa(
     profile_path: str,
     entitlements_path: str,
     main_app_name: str,
+    strict_entitlements: bool,
     keep_temp: bool,
     verbose: bool,
     new_bundle_id: str,
@@ -52,7 +48,8 @@ def resign_ipa(
     new_display_name: str,
     ops: Sequence[Op],
 ) -> None:
-    # Public API used by the CLI. The actual work happens in `_resign_ipa_in_tempdir`.
+    """对外入口：校验输入并在临时目录内执行完整重签名流程。"""
+    # 供 CLI 调用的公开入口，具体执行逻辑在 `_resign_ipa_in_tempdir`。
     if profile_path and not os.path.isfile(profile_path):
         raise SystemExit(f"Error: profile not found: {profile_path}")
     if entitlements_path and not os.path.isfile(entitlements_path):
@@ -76,6 +73,7 @@ def resign_ipa(
                     profile_path=profile_path,
                     entitlements_path=entitlements_path,
                     main_app_name=main_app_name,
+                    strict_entitlements=strict_entitlements,
                     keep_temp=keep_temp,
                     verbose=verbose,
                     new_bundle_id=new_bundle_id,
@@ -95,6 +93,7 @@ def resign_ipa(
             profile_path=profile_path,
             entitlements_path=entitlements_path,
             main_app_name=main_app_name,
+            strict_entitlements=strict_entitlements,
             keep_temp=keep_temp,
             verbose=verbose,
             new_bundle_id=new_bundle_id,
@@ -124,6 +123,7 @@ def _resign_ipa_in_tempdir(
     profile_path: str,
     entitlements_path: str,
     main_app_name: str,
+    strict_entitlements: bool,
     keep_temp: bool,
     verbose: bool,
     new_bundle_id: str,
@@ -132,7 +132,8 @@ def _resign_ipa_in_tempdir(
     new_display_name: str,
     ops: Sequence[Op],
 ) -> None:
-    # Unzip to `<temp>/unzipped` so we can zip back all top-level items later.
+    """在已准备好的临时目录中执行解包、修改、签名与回包。"""
+    # 先解压到 `<temp>/unzipped`，后续可完整回包所有顶层目录。
     root = os.path.join(td, "unzipped")
     os.makedirs(root, exist_ok=True)
     run_cmd(["/usr/bin/unzip", "-q", input_ipa, "-d", root], verbose=verbose)
@@ -164,10 +165,10 @@ def _resign_ipa_in_tempdir(
     if verbose:
         print(f"Bundles: {len(bundles)}")
 
-    # Map bundle_path -> (old_id, new_id)
+    # 记录应用包路径到 `(old_id, new_id)` 的映射关系。
     bundle_ids: dict[str, tuple[str, str]] = {}
 
-    # Apply Info.plist changes for each bundle.
+    # 对每个应用包执行 Info.plist 修改。
     ops_all = [o for o in ops if o.scope == "all"]
     ops_main = [o for o in ops if o.scope == "main"]
     ops_ext = [o for o in ops if o.scope == "ext"]
@@ -205,11 +206,11 @@ def _resign_ipa_in_tempdir(
 
         save_plist_binary(info_path, plist_obj)
 
-    # Embed profile into main app.
+    # 向主应用注入描述文件。
     if profile_path:
         shutil.copyfile(profile_path, os.path.join(app_path, "embedded.mobileprovision"))
 
-    # Prepare entitlements per bundle.
+    # 为每个应用包准备签名权限。
     explicit_entitlements: dict | None = None
     if entitlements_path:
         ent_obj = load_plist(entitlements_path)
@@ -223,9 +224,10 @@ def _resign_ipa_in_tempdir(
         explicit_entitlements=explicit_entitlements,
         profile=profile,
         extract_entitlements=codesign.extract_entitlements,
+        require_app_identifier=strict_entitlements,
     )
 
-    # Sign everything starting from main app bundle.
+    # 从主应用开始递归签名所有组件。
     sign_bundle_recursive(
         app_path,
         identity=sign_identity,
@@ -234,8 +236,8 @@ def _resign_ipa_in_tempdir(
     )
     codesign.verify(app_path)
 
-    # Zip back all top-level items (Payload, Symbols, etc.)
-    # -y: store symbolic links as links (do NOT follow); important for many Framework bundles.
+    # 回包所有顶层目录（如 Payload、Symbols 等）。
+    # `-y` 表示保留符号链接本身而非解引用，对 Framework 场景很重要。
     items = [x for x in os.listdir(root) if x not in ("__MACOSX",) and x]
     if os.path.exists(output_ipa):
         os.remove(output_ipa)

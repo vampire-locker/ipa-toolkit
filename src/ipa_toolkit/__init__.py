@@ -1,6 +1,5 @@
 """
-ipa-toolkit
+`ipa-toolkit` 包入口。
 
-Small toolkit for working with iOS .ipa files (currently: Info.plist edits and
-re-signing).
+提供处理 iOS `.ipa` 的轻量能力（当前包括 `Info.plist` 修改与重签名）。
 """

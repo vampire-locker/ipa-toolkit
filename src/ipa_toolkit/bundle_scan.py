@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Helpers for locating and mapping app bundles inside an unzipped IPA payload.
+用于在解压后的 IPA 目录中定位并映射各类应用包（bundle）。
 """
 
 import os
@@ -10,6 +10,7 @@ from .plist_edit import load_plist
 
 
 def find_main_app(payload_path: str, main_app_name: str = "") -> str:
+    """在 Payload 目录定位主应用包（`.app`），支持指定名称并处理歧义。"""
     apps: list[str] = []
     for name in sorted(os.listdir(payload_path)):
         p = os.path.join(payload_path, name)
@@ -56,6 +57,7 @@ def find_main_app(payload_path: str, main_app_name: str = "") -> str:
 
 
 def find_bundles_under(app_path: str) -> list[str]:
+    """收集主应用包下可签名的嵌套应用包（`.app`/`.appex`/`.xpc`）。"""
     out: list[str] = [app_path]
     for root, dirs, _files in os.walk(app_path):
         for d in dirs:
@@ -66,6 +68,7 @@ def find_bundles_under(app_path: str) -> list[str]:
 
 
 def bundle_new_id_for(old_id: str, old_main_id: str, new_main_id: str) -> str:
+    """根据主应用包标识变更规则，推导当前应用包的新标识。"""
     if not new_main_id:
         return old_id
     if old_id == old_main_id:

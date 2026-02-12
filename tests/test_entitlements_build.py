@@ -61,3 +61,18 @@ def test_build_entitlements_keeps_none_when_no_source() -> None:
         extract_entitlements=lambda _b: None,
     )
     assert out["/app/Main.app"] is None
+
+
+def test_build_entitlements_strict_rejects_missing_app_identifier() -> None:
+    try:
+        build_entitlements_by_bundle(
+            bundles=["/app/Main.app"],
+            bundle_ids={"/app/Main.app": ("com.old.app", "com.new.app")},
+            explicit_entitlements={"keychain-access-groups": ["TEAM123.com.new.app"]},
+            profile=None,
+            extract_entitlements=lambda _b: None,
+            require_app_identifier=True,
+        )
+        assert False, "expected SystemExit"
+    except SystemExit as e:
+        assert "missing application-identifier" in str(e)

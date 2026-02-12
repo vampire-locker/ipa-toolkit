@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Apply high-level plist operation specs (`Op`) onto plist dictionaries.
+将高层 `Op` 操作规范应用到 plist 字典对象。
 """
 
 from typing import Sequence
@@ -11,6 +11,7 @@ from .types import Op
 
 
 def _bool_from_str(s: str) -> bool:
+    """将常见布尔字符串（true/false/1/0 等）转换为 bool。"""
     v = s.strip().lower()
     if v in ("true", "1", "yes", "y"):
         return True
@@ -20,6 +21,7 @@ def _bool_from_str(s: str) -> bool:
 
 
 def apply_ops(plist_obj: dict, ops: Sequence[Op]) -> None:
+    """按顺序将 `Op` 列表应用到给定 plist 字典。"""
     for op in ops:
         try:
             if op.kind == "set_string":

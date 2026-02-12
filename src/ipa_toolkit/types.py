@@ -1,5 +1,5 @@
 """
-Shared small types used by the CLI and the IPA processing pipeline.
+CLI 与 IPA 处理流程共享的轻量类型定义。
 """
 
 from dataclasses import dataclass
@@ -7,15 +7,17 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Op:
-    # scope:
-    #   - "all": apply to main app + extensions
-    #   - "main": apply only to the main .app
-    #   - "ext": apply only to extensions/services under the main app
+    """描述一次对 `Info.plist` 的可序列化操作。"""
+
+    # `scope` 作用域：
+    # - `all`：主应用与扩展都生效。
+    # - `main`：仅主应用生效。
+    # - `ext`：仅扩展/服务生效。
     scope: str
-    # kind:
-    #   - set_string / set_int / set_bool
-    #   - delete
-    #   - array_add / array_remove
+    # `kind` 操作类型：
+    # - `set_string` / `set_int` / `set_bool`
+    # - `delete`
+    # - `array_add` / `array_remove`
     kind: str
     key_path: str
     value: str | None = None
