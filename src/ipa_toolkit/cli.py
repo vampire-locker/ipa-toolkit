@@ -113,6 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-s", "--sign-identity", default="", help="Codesign identity name")
     p.add_argument("-p", "--profile", default="", help="Provisioning profile (.mobileprovision) to embed into main app")
     p.add_argument("-e", "--entitlements", default="", help="Entitlements plist to use for signing (optional)")
+    p.add_argument("--main-app-name", default="",
+                   help="Main app bundle name under Payload (e.g. MyApp.app) when multiple .app exist")
     p.add_argument("--keep-temp", action="store_true",
                    help="Keep temporary working directory (prints its path at the end)")
     p.add_argument("--verbose", action="store_true", help="Verbose logging")
@@ -168,6 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sign_identity=ns.sign_identity,
         profile_path=profile,
         entitlements_path=entitlements,
+        main_app_name=ns.main_app_name or "",
         keep_temp=bool(ns.keep_temp),
         verbose=bool(ns.verbose),
         new_bundle_id=ns.bundle_id or "",

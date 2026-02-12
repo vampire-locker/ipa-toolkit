@@ -20,208 +20,20 @@ High-level flow:
 
 import os
 import shutil
-import subprocess
 import tempfile
 from typing import Sequence
 
 from . import codesign
-from .types import Op
+from .bundle_scan import bundle_new_id_for, find_bundles_under, find_main_app
+from .entitlements import build_entitlements_by_bundle
+from .pipeline_utils import run_cmd, sign_bundle_recursive
 from .plist_edit import (
-    array_add_string,
-    array_remove_string,
-    delete_value,
     load_plist,
     save_plist_binary,
-    set_value,
 )
+from .plist_ops import apply_ops
 from .provisioning import ProvisioningProfile, load_mobileprovision
-
-
-def _run(cmd: list[str], *, cwd: str | None = None, verbose: bool = False) -> None:
-    if verbose:
-        if cwd:
-            print(f"+ (cd {cwd}) {' '.join(cmd)}")
-        else:
-            print(f"+ {' '.join(cmd)}")
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, check=False)
-    if p.returncode != 0:
-        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr.decode(errors='replace')}")
-
-
-def _find_first_dir(parent: str, suffix: str) -> str:
-    for name in os.listdir(parent):
-        p = os.path.join(parent, name)
-        if os.path.isdir(p) and name.endswith(suffix):
-            return p
-    return ""
-
-
-def _find_bundles_under(app_path: str) -> list[str]:
-    # Walk the app bundle and collect everything that looks like a signable bundle.
-    out: list[str] = []
-    for root, dirs, _files in os.walk(app_path):
-        for d in dirs:
-            if d.endswith(".app") or d.endswith(".appex") or d.endswith(".xpc"):
-                out.append(os.path.join(root, d))
-        # We still want to descend because .appex might contain .app etc.
-    # Ensure main app first for id mapping convenience.
-    out.sort(key=lambda p: (0 if p == app_path else 1, len(p)))
-    return out
-
-
-def _bundle_new_id_for(old_id: str, old_main_id: str, new_main_id: str) -> str:
-    # Keep the old identifier unless it's the main bundle id or shares its prefix.
-    if not new_main_id:
-        return old_id
-    if old_id == old_main_id:
-        return new_main_id
-    if old_id.startswith(old_main_id + "."):
-        return new_main_id + old_id[len(old_main_id):]
-    return old_id
-
-
-def _bool_from_str(s: str) -> bool:
-    v = s.strip().lower()
-    if v in ("true", "1", "yes", "y"):
-        return True
-    if v in ("false", "0", "no", "n"):
-        return False
-    raise ValueError(f"invalid bool: {s}")
-
-
-def _apply_ops(plist_obj: dict, ops: Sequence[Op]) -> None:
-    for op in ops:
-        if op.kind == "set_string":
-            set_value(plist_obj, op.key_path, op.value or "")
-        elif op.kind == "set_int":
-            set_value(plist_obj, op.key_path, int(op.value or "0"))
-        elif op.kind == "set_bool":
-            set_value(plist_obj, op.key_path, _bool_from_str(op.value or "false"))
-        elif op.kind == "delete":
-            delete_value(plist_obj, op.key_path)
-        elif op.kind == "array_add":
-            array_add_string(plist_obj, op.key_path, op.value or "")
-        elif op.kind == "array_remove":
-            array_remove_string(plist_obj, op.key_path, op.value or "")
-        else:
-            raise RuntimeError(f"Unknown op: {op.kind}")
-
-
-def _adjust_entitlements_for_bundle(
-    ent: dict,
-    *,
-    team_id: str,
-    old_bundle_id: str,
-    new_bundle_id: str,
-) -> dict:
-    # When changing bundle id, some entitlements must match the new application
-    # identifier prefix: "<TEAMID>.<BUNDLEID>".
-    if not team_id or old_bundle_id == new_bundle_id:
-        return ent
-
-    out = dict(ent)
-    new_prefix = f"{team_id}.{new_bundle_id}"
-
-    for key in ("application-identifier", "com.apple.application-identifier"):
-        if key in out:
-            out[key] = new_prefix
-
-    kag = out.get("keychain-access-groups")
-    if isinstance(kag, list):
-        old_prefix = f"{team_id}.{old_bundle_id}"
-        new_kag = []
-        for item in kag:
-            if isinstance(item, str) and item.startswith(old_prefix):
-                new_kag.append(new_prefix + item[len(old_prefix):])
-            else:
-                new_kag.append(item)
-        out["keychain-access-groups"] = new_kag
-
-    return out
-
-
-def _sign_bundle_recursive(
-    bundle_path: str,
-    *,
-    identity: str,
-    entitlements_by_bundle: dict[str, dict | None],
-    verbose: bool = False,
-) -> None:
-    # Sign order matters:
-    # - sign nested bundles first (.appex, watch apps, xpc services)
-    # - sign embedded frameworks/dylibs
-    # - finally sign the bundle itself
-    # 1) PlugIns
-    plugins = os.path.join(bundle_path, "PlugIns")
-    if os.path.isdir(plugins):
-        for name in os.listdir(plugins):
-            p = os.path.join(plugins, name)
-            if os.path.isdir(p) and name.endswith(".appex"):
-                _sign_bundle_recursive(
-                    p,
-                    identity=identity,
-                    entitlements_by_bundle=entitlements_by_bundle,
-                    verbose=verbose,
-                )
-
-    # 2) Watch apps
-    watch = os.path.join(bundle_path, "Watch")
-    if os.path.isdir(watch):
-        # typical layout: Watch/*.app
-        for root, dirs, _files in os.walk(watch):
-            for d in dirs:
-                if d.endswith(".app"):
-                    _sign_bundle_recursive(
-                        os.path.join(root, d),
-                        identity=identity,
-                        entitlements_by_bundle=entitlements_by_bundle,
-                        verbose=verbose,
-                    )
-
-    # 3) Frameworks & dylibs
-    frameworks = os.path.join(bundle_path, "Frameworks")
-    if os.path.isdir(frameworks):
-        for name in os.listdir(frameworks):
-            p = os.path.join(frameworks, name)
-            if os.path.isdir(p) and name.endswith(".framework"):
-                codesign.remove_signature(p)
-                codesign.sign(p, identity)
-        for name in os.listdir(frameworks):
-            p = os.path.join(frameworks, name)
-            if os.path.isfile(p) and (name.endswith(".dylib") or name.endswith(".so")):
-                codesign.remove_signature(p)
-                codesign.sign(p, identity)
-
-    # 4) XPC services
-    xpcs = os.path.join(bundle_path, "XPCServices")
-    if os.path.isdir(xpcs):
-        for name in os.listdir(xpcs):
-            p = os.path.join(xpcs, name)
-            if os.path.isdir(p) and name.endswith(".xpc"):
-                _sign_bundle_recursive(
-                    p,
-                    identity=identity,
-                    entitlements_by_bundle=entitlements_by_bundle,
-                    verbose=verbose,
-                )
-
-    # 5) Sign the bundle itself
-    codesign.remove_signature(bundle_path)
-    ents = entitlements_by_bundle.get(bundle_path)
-    ent_path: str | None = None
-    try:
-        if ents is not None:
-            ent_path = codesign.write_entitlements(ents)
-        if verbose:
-            suffix = " (no entitlements)" if ents is None else ""
-            print(f"Signing: {bundle_path}{suffix}")
-        codesign.sign(bundle_path, identity, entitlements_path=ent_path)
-    finally:
-        if ent_path and os.path.exists(ent_path):
-            try:
-                os.remove(ent_path)
-            except OSError:
-                pass
+from .types import Op
 
 
 def resign_ipa(
@@ -231,6 +43,7 @@ def resign_ipa(
     sign_identity: str,
     profile_path: str,
     entitlements_path: str,
+    main_app_name: str,
     keep_temp: bool,
     verbose: bool,
     new_bundle_id: str,
@@ -262,6 +75,7 @@ def resign_ipa(
                     profile=profile,
                     profile_path=profile_path,
                     entitlements_path=entitlements_path,
+                    main_app_name=main_app_name,
                     keep_temp=keep_temp,
                     verbose=verbose,
                     new_bundle_id=new_bundle_id,
@@ -280,6 +94,7 @@ def resign_ipa(
             profile=profile,
             profile_path=profile_path,
             entitlements_path=entitlements_path,
+            main_app_name=main_app_name,
             keep_temp=keep_temp,
             verbose=verbose,
             new_bundle_id=new_bundle_id,
@@ -308,6 +123,7 @@ def _resign_ipa_in_tempdir(
     profile: ProvisioningProfile | None,
     profile_path: str,
     entitlements_path: str,
+    main_app_name: str,
     keep_temp: bool,
     verbose: bool,
     new_bundle_id: str,
@@ -319,7 +135,7 @@ def _resign_ipa_in_tempdir(
     # Unzip to `<temp>/unzipped` so we can zip back all top-level items later.
     root = os.path.join(td, "unzipped")
     os.makedirs(root, exist_ok=True)
-    _run(["/usr/bin/unzip", "-q", input_ipa, "-d", root], verbose=verbose)
+    run_cmd(["/usr/bin/unzip", "-q", input_ipa, "-d", root], verbose=verbose)
 
     macosx = os.path.join(root, "__MACOSX")
     if os.path.isdir(macosx):
@@ -329,7 +145,7 @@ def _resign_ipa_in_tempdir(
     if not os.path.isdir(payload):
         raise SystemExit("Error: Payload not found in ipa.")
 
-    app_path = _find_first_dir(payload, ".app")
+    app_path = find_main_app(payload, main_app_name)
     if not app_path:
         raise SystemExit("Error: .app not found under Payload/.")
     if verbose:
@@ -344,7 +160,7 @@ def _resign_ipa_in_tempdir(
     if not isinstance(old_main_id, str) or not old_main_id:
         raise SystemExit("Error: failed to read CFBundleIdentifier from main Info.plist")
 
-    bundles = _find_bundles_under(app_path)
+    bundles = find_bundles_under(app_path)
     if verbose:
         print(f"Bundles: {len(bundles)}")
 
@@ -368,7 +184,7 @@ def _resign_ipa_in_tempdir(
         if not isinstance(old_id, str) or not old_id:
             continue
 
-        new_id = _bundle_new_id_for(old_id, old_main_id, new_bundle_id)
+        new_id = bundle_new_id_for(old_id, old_main_id, new_bundle_id)
         bundle_ids[b] = (old_id, new_id)
 
         if new_bundle_id and new_id != old_id:
@@ -381,11 +197,11 @@ def _resign_ipa_in_tempdir(
             plist_obj["CFBundleDisplayName"] = new_display_name
             plist_obj["CFBundleName"] = new_display_name
 
-        _apply_ops(plist_obj, ops_all)
+        apply_ops(plist_obj, ops_all)
         if b == app_path:
-            _apply_ops(plist_obj, ops_main)
+            apply_ops(plist_obj, ops_main)
         else:
-            _apply_ops(plist_obj, ops_ext)
+            apply_ops(plist_obj, ops_ext)
 
         save_plist_binary(info_path, plist_obj)
 
@@ -401,33 +217,16 @@ def _resign_ipa_in_tempdir(
             raise SystemExit("Error: entitlements plist is not a dict")
         explicit_entitlements = ent_obj
 
-    ent_by_bundle: dict[str, dict | None] = {}
-    for b in bundles:
-        if explicit_entitlements is not None:
-            ent_by_bundle[b] = explicit_entitlements
-            continue
-
-        # Prefer entitlements extracted from the original signature. If the IPA is
-        # unsigned / stripped, fall back to profile-derived entitlements.
-        ent = codesign.extract_entitlements(b)
-        if ent is None and profile is not None:
-            ent = dict(profile.entitlements)
-        if ent is None:
-            ent_by_bundle[b] = None
-            continue
-
-        if profile is not None and b in bundle_ids:
-            old_id, new_id = bundle_ids[b]
-            ent = _adjust_entitlements_for_bundle(
-                ent,
-                team_id=profile.team_id,
-                old_bundle_id=old_id,
-                new_bundle_id=new_id,
-            )
-        ent_by_bundle[b] = ent
+    ent_by_bundle = build_entitlements_by_bundle(
+        bundles=bundles,
+        bundle_ids=bundle_ids,
+        explicit_entitlements=explicit_entitlements,
+        profile=profile,
+        extract_entitlements=codesign.extract_entitlements,
+    )
 
     # Sign everything starting from main app bundle.
-    _sign_bundle_recursive(
+    sign_bundle_recursive(
         app_path,
         identity=sign_identity,
         entitlements_by_bundle=ent_by_bundle,
@@ -440,7 +239,7 @@ def _resign_ipa_in_tempdir(
     items = [x for x in os.listdir(root) if x not in ("__MACOSX",) and x]
     if os.path.exists(output_ipa):
         os.remove(output_ipa)
-    _run(["/usr/bin/zip", "-qry", "-y", output_ipa, *items], cwd=root, verbose=verbose)
+    run_cmd(["/usr/bin/zip", "-qry", "-y", output_ipa, *items], cwd=root, verbose=verbose)
 
     print("Done:")
     print(f"  Input : {input_ipa}")

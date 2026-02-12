@@ -83,6 +83,7 @@ ipa-toolkit -i INPUT.ipa -s "SIGN_IDENTITY" [选项]
 - `-o, --output` - 输出的 .ipa 文件路径（默认：`<input>.resigned.ipa`）
 - `-p, --profile` - 要嵌入的 provisioning profile 文件（.mobileprovision）
 - `-e, --entitlements` - 自定义 entitlements.plist 文件（可选）
+- `--main-app-name` - 当 Payload 下有多个 `.app` 时，指定主应用（如 `MyApp.app`）
 - `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展）
 - `-v, --version` - 新的版本号（CFBundleShortVersionString）
 - `-n, --build` - 新的构建号（CFBundleVersion）
@@ -128,6 +129,13 @@ ipa-toolkit -i app.ipa -s "IDENTITY" \
 --set-main NSCameraUsageDescription="只修改主应用"
 --set-ext NSExtension:SomeKey="只修改扩展"
 --set NSCameraUsageDescription="修改所有 bundle（默认）"
+```
+
+主应用选择（多 `.app` 场景）：
+
+```bash
+ipa-toolkit -i app.ipa -s "IDENTITY" \
+  --main-app-name MyApp.app
 ```
 
 ### 完整示例
@@ -259,6 +267,7 @@ codesign -d --entitlements :- Payload/YourApp.app
 4. **加密应用** - App Store 下载的 IPA 通常已加密，需要先解密
 5. **权限调整** - 修改 Bundle ID 时，entitlements 会自动调整但可能不完整
 6. **兼容性** - Apple 的签名机制可能随时变化
+7. **Entitlements 校验** - 工具会校验 `application-identifier` 与 `keychain-access-groups` 的关键一致性，不匹配会直接报错
 
 ## 开发
 
@@ -280,7 +289,11 @@ ipa-toolkit/
 ├── src/ipa_toolkit/
 │   ├── cli.py           # 命令行接口
 │   ├── ipa.py           # 主处理流程
+│   ├── bundle_scan.py   # 主 app 和嵌套 bundle 发现
 │   ├── codesign.py      # 代码签名
+│   ├── entitlements.py  # Entitlements 调整与校验
+│   ├── pipeline_utils.py # 流水线命令执行与递归签名
+│   ├── plist_ops.py     # 高层 plist 操作应用
 │   ├── provisioning.py  # Profile 处理
 │   ├── plist_edit.py    # Plist 编辑
 │   └── plist_path.py    # 键路径解析
