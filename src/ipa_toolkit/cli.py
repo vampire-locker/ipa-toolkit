@@ -119,7 +119,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output .ipa path (default: <input>.resigned.ipa)",
     )
     # 此处不设为 argparse 的 required，便于输出更可操作的缺参提示。
-    p.add_argument("-s", "--sign-identity", default="", help="Codesign identity name")
+    p.add_argument(
+        "-s",
+        "--sign-identity",
+        default="",
+        help="Codesign identity name (list with: security find-identity -v -p codesigning)",
+    )
     p.add_argument(
         "-p",
         "--profile",
