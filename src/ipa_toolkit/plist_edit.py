@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 `Info.plist` 读写与路径化修改工具。
 
@@ -7,6 +5,8 @@ from __future__ import annotations
 - 仅在设置值时按需创建中间容器（`dict` 或 `list`）。
 - 删除操作采用尽力而为策略（路径不存在时忽略）。
 """
+
+from __future__ import annotations
 
 import plistlib
 from typing import Any

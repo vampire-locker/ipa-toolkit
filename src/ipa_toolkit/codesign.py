@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """
 对 macOS `/usr/bin/codesign` 的轻量封装。
 
 将签名相关细节收敛在此模块，便于上层流程保持清晰并易于测试。
 """
+
+from __future__ import annotations
 
 import os
 import plistlib
@@ -13,9 +13,11 @@ import tempfile
 from typing import Any
 
 
-def _run(cmd: list[str], *, check: bool = True, cwd: str | None = None) -> subprocess.CompletedProcess[bytes]:
+def _run(
+    cmd: list[str], *, check: bool = True, cwd: str | None = None
+) -> subprocess.CompletedProcess[bytes]:
     """执行系统命令并返回 `subprocess` 结果对象。"""
-    return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=check, cwd=cwd)
+    return subprocess.run(cmd, capture_output=True, check=check, cwd=cwd)
 
 
 def remove_signature(path: str) -> None:

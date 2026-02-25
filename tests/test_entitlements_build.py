@@ -73,6 +73,6 @@ def test_build_entitlements_strict_rejects_missing_app_identifier() -> None:
             extract_entitlements=lambda _b: None,
             require_app_identifier=True,
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         assert "missing application-identifier" in str(e)

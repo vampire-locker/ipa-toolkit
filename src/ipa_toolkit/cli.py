@@ -6,7 +6,7 @@
 
 import argparse
 import os
-from typing import Sequence
+from collections.abc import Sequence
 
 from .ipa import resign_ipa
 from .types import Op
@@ -106,35 +106,74 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawTextHelpFormatter,
         description=(
             "Modify ipa (bundle id / version / display name / Info.plist keys) and re-sign.\n"
-            "It preserves ALL top-level items in the ipa (Payload, Symbols, SwiftSupport, etc.) when re-zipping."
+            "It preserves ALL top-level items in the ipa "
+            "(Payload, Symbols, SwiftSupport, etc.) when re-zipping."
         ),
     )
 
     p.add_argument("-i", "--input", required=True, help="Input .ipa path")
-    p.add_argument("-o", "--output", default="", help="Output .ipa path (default: <input>.resigned.ipa)")
+    p.add_argument(
+        "-o",
+        "--output",
+        default="",
+        help="Output .ipa path (default: <input>.resigned.ipa)",
+    )
     # 此处不设为 argparse 的 required，便于输出更可操作的缺参提示。
     p.add_argument("-s", "--sign-identity", default="", help="Codesign identity name")
-    p.add_argument("-p", "--profile", default="", help="Provisioning profile (.mobileprovision) to embed into main app")
-    p.add_argument("-e", "--entitlements", default="", help="Entitlements plist to use for signing (optional)")
-    p.add_argument("--main-app-name", default="",
-                   help="Main app bundle name under Payload (e.g. MyApp.app) when multiple .app exist")
-    p.add_argument("--strict-entitlements", action="store_true",
-                   help="Fail when required entitlements identifiers are missing")
-    p.add_argument("--keep-temp", action="store_true",
-                   help="Keep temporary working directory (prints its path at the end)")
+    p.add_argument(
+        "-p",
+        "--profile",
+        default="",
+        help="Provisioning profile (.mobileprovision) to embed into main app",
+    )
+    p.add_argument(
+        "-e",
+        "--entitlements",
+        default="",
+        help="Entitlements plist to use for signing (optional)",
+    )
+    p.add_argument(
+        "--main-app-name",
+        default="",
+        help="Main app bundle name under Payload (e.g. MyApp.app) when multiple .app exist",
+    )
+    p.add_argument(
+        "--strict-entitlements",
+        action="store_true",
+        help="Fail when required entitlements identifiers are missing",
+    )
+    p.add_argument(
+        "--keep-temp",
+        action="store_true",
+        help="Keep temporary working directory (prints its path at the end)",
+    )
     p.add_argument("--verbose", action="store_true", help="Verbose logging")
 
-    p.add_argument("-b", "--bundle-id", default="", help="New main app CFBundleIdentifier (prefix replace for extensions)")
+    p.add_argument(
+        "-b",
+        "--bundle-id",
+        default="",
+        help="New main app CFBundleIdentifier (prefix replace for extensions)",
+    )
     p.add_argument("-v", "--version", default="", help="New CFBundleShortVersionString")
     p.add_argument("-n", "--build", default="", help="New CFBundleVersion")
-    p.add_argument("-d", "--display-name", default="", help="New CFBundleDisplayName (also sets CFBundleName)")
+    p.add_argument(
+        "-d",
+        "--display-name",
+        default="",
+        help="New CFBundleDisplayName (also sets CFBundleName)",
+    )
 
     _add_set_variants(p, "--set", "Set Info.plist value as string")
     _add_set_variants(p, "--set-int", "Set Info.plist value as integer")
     _add_set_variants(p, "--set-bool", "Set Info.plist value as bool (true/false/1/0)")
     _add_delete_variants(p, "--delete", "Delete Info.plist key/path")
     _add_set_variants(p, "--array-add", "Append a string element to an array at KEY_PATH")
-    _add_set_variants(p, "--array-remove", "Remove string elements matching VALUE from array at KEY_PATH")
+    _add_set_variants(
+        p,
+        "--array-remove",
+        "Remove string elements matching VALUE from array at KEY_PATH",
+    )
 
     return p
 

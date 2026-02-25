@@ -9,7 +9,6 @@ Allows running the tool without installing it:
 import os
 import sys
 
-
 # Support running from a source checkout without installation by adding `src/`
 # to sys.path.
 _HERE = os.path.dirname(os.path.abspath(__file__))

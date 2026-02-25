@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """
 签名描述文件（`mobileprovision`）解析辅助模块。
 
 `.mobileprovision` 本质是 CMS 封装的 plist，这里通过 macOS `security cms` 解码。
 """
+
+from __future__ import annotations
 
 import plistlib
 import subprocess
@@ -23,7 +23,7 @@ class ProvisioningProfile:
 
 def _run(cmd: list[str]) -> bytes:
     """执行命令并返回 stdout，失败时抛出异常。"""
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    p = subprocess.run(cmd, capture_output=True, check=False)
     if p.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr.decode(errors='replace')}")
     return p.stdout

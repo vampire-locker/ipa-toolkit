@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 流程通用工具：命令执行与递归签名顺序控制。
 """
+
+from __future__ import annotations
 
 import os
 import subprocess
@@ -17,7 +17,7 @@ def run_cmd(cmd: list[str], *, cwd: str | None = None, verbose: bool = False) ->
             print(f"+ (cd {cwd}) {' '.join(cmd)}")
         else:
             print(f"+ {' '.join(cmd)}")
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, check=False)
+    p = subprocess.run(cmd, capture_output=True, cwd=cwd, check=False)
     if p.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr.decode(errors='replace')}")
 

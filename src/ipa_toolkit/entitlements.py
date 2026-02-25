@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """
 签名权限（`entitlements`）重写与校验辅助模块。
 
 将应用标识与钥匙串分组规则独立出来，便于复用与单元测试。
 """
+
+from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from typing import Any

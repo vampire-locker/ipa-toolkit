@@ -1,19 +1,18 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 from ipa_toolkit import pipeline_utils
 
 
 def test_run_cmd_raises_runtime_error_on_failure(monkeypatch) -> None:
-    def fake_run(_cmd, stdout=None, stderr=None, cwd=None, check=False):
-        _ = (stdout, stderr, cwd, check)
+    def fake_run(_cmd, capture_output=None, cwd=None, check=False):
+        _ = (capture_output, cwd, check)
         return SimpleNamespace(returncode=1, stderr=b"boom")
 
     monkeypatch.setattr(pipeline_utils.subprocess, "run", fake_run)
 
     try:
         pipeline_utils.run_cmd(["/usr/bin/false"])
-        assert False, "expected RuntimeError"
+        raise AssertionError("expected RuntimeError")
     except RuntimeError as e:
         msg = str(e)
         assert "Command failed" in msg

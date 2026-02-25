@@ -9,7 +9,7 @@ def test_apply_ops_reports_invalid_int_value() -> None:
             obj,
             [Op(scope="all", kind="set_int", key_path="A:B", value="12x")],
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "invalid plist operation" in msg
@@ -24,7 +24,7 @@ def test_apply_ops_reports_type_conflict_path() -> None:
             obj,
             [Op(scope="all", kind="set_string", key_path="A:B", value="v")],
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "invalid plist operation" in msg

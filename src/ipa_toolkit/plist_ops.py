@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """
 将高层 `Op` 操作规范应用到 plist 字典对象。
 """
 
-from typing import Sequence
+from __future__ import annotations
+
+from collections.abc import Sequence
 
 from .plist_edit import array_add_string, array_remove_string, delete_value, set_value
 from .types import Op

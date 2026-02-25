@@ -29,7 +29,7 @@ def test_validate_entitlements_rejects_mismatched_app_identifiers() -> None:
             new_bundle_id="com.new.app",
             profile_team_id="TEAM123",
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "must match" in msg
@@ -45,7 +45,7 @@ def test_validate_entitlements_rejects_wrong_expected_app_id() -> None:
             new_bundle_id="com.new.app",
             profile_team_id="TEAM123",
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "expected TEAM123.com.new.app" in msg
@@ -67,7 +67,7 @@ def test_validate_entitlements_rejects_stale_keychain_prefix() -> None:
             new_bundle_id="com.new.app",
             profile_team_id="TEAM123",
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "old bundle prefix TEAM123.com.old.app" in msg
@@ -86,7 +86,7 @@ def test_validate_entitlements_rejects_non_list_keychain_groups() -> None:
             new_bundle_id="com.new.app",
             profile_team_id="TEAM123",
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "must be an array" in msg
@@ -103,7 +103,7 @@ def test_validate_entitlements_strict_rejects_missing_app_identifier() -> None:
             profile_team_id="TEAM123",
             require_app_identifier=True,
         )
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "missing application-identifier" in msg

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 IPA 重签名主流程模块。
 
@@ -13,10 +11,12 @@ IPA 重签名主流程模块。
 7) 保留顶层目录结构并重新打包输出。
 """
 
+from __future__ import annotations
+
 import os
 import shutil
 import tempfile
-from typing import Sequence
+from collections.abc import Sequence
 
 from . import codesign
 from .bundle_scan import bundle_new_id_for, find_bundles_under, find_main_app
@@ -107,9 +107,7 @@ def resign_ipa(
             print(f"Temp dir kept: {td}")
         raise
     finally:
-        if keep_temp:
-            return
-        if td:
+        if not keep_temp and td:
             shutil.rmtree(td, ignore_errors=True)
 
 

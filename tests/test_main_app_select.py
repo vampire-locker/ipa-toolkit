@@ -59,7 +59,7 @@ def test_find_main_app_error_when_ambiguous(tmp_path) -> None:
 
     try:
         find_main_app(str(payload))
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "multiple .app found" in msg
@@ -75,7 +75,7 @@ def test_find_main_app_error_when_named_not_found(tmp_path) -> None:
 
     try:
         find_main_app(str(payload), "Missing.app")
-        assert False, "expected SystemExit"
+        raise AssertionError("expected SystemExit")
     except SystemExit as e:
         msg = str(e)
         assert "main app not found" in msg

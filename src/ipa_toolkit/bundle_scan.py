@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 用于在解压后的 IPA 目录中定位并映射各类应用包（bundle）。
 """
+
+from __future__ import annotations
 
 import os
 
