@@ -16,7 +16,7 @@
 - ✅ **作用域控制** - 可以只针对主应用或扩展进行修改
 - ✅ **完整保留** - 保留 IPA 中的所有内容（Payload、Symbols、SwiftSupport 等）
 - ✅ **递归签名** - 自动处理 frameworks、extensions、XPC services
-- ✅ **只读查看 IPA 信息** - 一条命令输出主应用/版本/URL Schemes/扩展等关键信息
+- ✅ **只读查看 IPA 信息** - 一条命令输出主应用/版本/当前签名/URL Schemes/扩展等关键信息
 
 ## 系统要求
 
@@ -100,6 +100,7 @@ ipa-toolkit [-i INPUT.ipa] [-s "SIGN_IDENTITY"] [-p profile.mobileprovision] [�
 - `--main-app-name` - 当 Payload 下有多个 `.app` 时，指定主应用（如 `MyApp.app`）
 - `--strict-entitlements` - 严格校验 entitlements 必需标识（缺失会报错）
 - `--inspect` - 仅查看 IPA 关键信息（不重签、不修改，不需要 `-s/-p`）
+  - 输出包含当前签名状态、签名 Identifier/TeamID/Authority（可解析时）
 - `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展，并默认同步 URL Types）
 - `--auto-rewrite-bundle-id-values` - 配合 `-b` 使用，自动重写 Info.plist 中“看起来像 bundle id”的字符串值
 - `-v, --version` - 新的版本号（CFBundleShortVersionString）

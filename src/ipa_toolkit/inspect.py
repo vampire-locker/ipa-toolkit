@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import os
 import plistlib
+import subprocess
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from typing import Any
+
+from .bundle_scan import find_main_app
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,11 @@ class IpaInfo:
     min_os_version: str
     url_schemes: list[str]
     has_embedded_profile: bool
+    is_signed: bool
+    signature_identifier: str
+    signature_team_id: str
+    signature_authorities: list[str]
+    signature_error: str
     nested_bundles: list[BundleInfo]
 
 
@@ -125,6 +134,60 @@ def _collect_url_schemes(main_plist: dict[str, Any]) -> list[str]:
     return out
 
 
+def _inspect_signature_info(
+    input_ipa: str,
+    *,
+    main_app_name: str,
+) -> tuple[bool, str, str, list[str], str]:
+    """提取当前签名信息：是否已签名、Identifier、TeamID、Authority 列表。"""
+    with tempfile.TemporaryDirectory(prefix="inspect_ipa_") as td:
+        unzip = subprocess.run(
+            ["/usr/bin/unzip", "-q", input_ipa, "Payload/*", "-d", td],
+            capture_output=True,
+            check=False,
+        )
+        if unzip.returncode != 0:
+            err = unzip.stderr.decode(errors="replace").strip()
+            first_line = err.splitlines()[0].strip() if err else ""
+            return (
+                False,
+                "",
+                "",
+                [],
+                first_line or "failed to unzip ipa for signature inspection",
+            )
+
+        app_path = find_main_app(os.path.join(td, "Payload"), main_app_name)
+        if not app_path:
+            return False, "", "", [], "main app not found under Payload"
+
+        p = subprocess.run(
+            ["/usr/bin/codesign", "-dvv", app_path],
+            capture_output=True,
+            check=False,
+        )
+        text = (p.stderr or b"").decode(errors="replace")
+        if p.stdout:
+            text += "\n" + p.stdout.decode(errors="replace")
+
+        identifier = ""
+        team_id = ""
+        authorities: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if line.startswith("Identifier="):
+                identifier = line.split("=", 1)[1].strip()
+            elif line.startswith("TeamIdentifier="):
+                team_id = line.split("=", 1)[1].strip()
+            elif line.startswith("Authority="):
+                authorities.append(line.split("=", 1)[1].strip())
+
+        if p.returncode != 0:
+            err = text.strip().splitlines()[-1] if text.strip() else "codesign inspect failed"
+            return False, identifier, team_id, authorities, err
+        return True, identifier, team_id, authorities, ""
+
+
 def inspect_ipa(input_ipa: str, *, main_app_name: str = "") -> IpaInfo:
     """读取 IPA 元数据并返回结构化结果。"""
     if not os.path.isfile(input_ipa):
@@ -151,6 +214,10 @@ def inspect_ipa(input_ipa: str, *, main_app_name: str = "") -> IpaInfo:
         display_name = _plist_str(main_plist, "CFBundleDisplayName") or _plist_str(
             main_plist, "CFBundleName"
         )
+        is_signed, sig_id, sig_team, sig_auths, sig_err = _inspect_signature_info(
+            input_ipa,
+            main_app_name=main_app_name,
+        )
 
         return IpaInfo(
             input_ipa=input_ipa,
@@ -161,6 +228,11 @@ def inspect_ipa(input_ipa: str, *, main_app_name: str = "") -> IpaInfo:
             min_os_version=_plist_str(main_plist, "MinimumOSVersion"),
             url_schemes=_collect_url_schemes(main_plist),
             has_embedded_profile=has_profile,
+            is_signed=is_signed,
+            signature_identifier=sig_id,
+            signature_team_id=sig_team,
+            signature_authorities=sig_auths,
+            signature_error=sig_err,
             nested_bundles=nested,
         )
 
@@ -176,6 +248,15 @@ def print_ipa_info(info: IpaInfo) -> None:
     print(f"  Build               : {info.build or '-'}")
     print(f"  Minimum OS Version  : {info.min_os_version or '-'}")
     print(f"  Embedded Profile    : {'yes' if info.has_embedded_profile else 'no'}")
+    print(f"  Is Signed           : {'yes' if info.is_signed else 'no'}")
+    print(f"  Signature Identifier: {info.signature_identifier or '-'}")
+    print(f"  Signature Team ID   : {info.signature_team_id or '-'}")
+    if info.signature_authorities:
+        print(f"  Signature Authority : {', '.join(info.signature_authorities)}")
+    else:
+        print("  Signature Authority : -")
+    if info.signature_error:
+        print(f"  Signature Note      : {info.signature_error}")
     if info.url_schemes:
         print(f"  URL Schemes         : {', '.join(info.url_schemes)}")
     else:
