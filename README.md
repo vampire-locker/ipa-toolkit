@@ -70,18 +70,23 @@ ipa-toolkit -i app.ipa -o app-resigned.ipa \
 ### 基本用法
 
 ```bash
-ipa-toolkit -i INPUT.ipa -s "SIGN_IDENTITY" [选项]
+ipa-toolkit [-i INPUT.ipa] [-s "SIGN_IDENTITY"] [-p profile.mobileprovision] [选项]
 ```
 
-**必需参数：**
+**签名参数（至少满足一种）：**
 
-- `-i, --input` - 输入的 .ipa 文件路径
 - `-s, --sign-identity` - 代码签名身份名称
+- `-p, --profile` - provisioning profile；未传 `-s` 时可自动从 profile 推导
 
 **常用选项：**
 
 - `-o, --output` - 输出的 .ipa 文件路径（默认：`<input>.resigned.ipa`）
+- `-i, --input` - 输入的 .ipa 文件路径
+  - 未指定时，会自动查找当前目录下的 `.ipa`（仅存在 1 个时自动使用）
+  - 若有多个 `.ipa`，交互模式会列出候选供选择
 - `-p, --profile` - 要嵌入的 provisioning profile 文件（.mobileprovision）
+  - 未指定时，会自动查找 `-i` 同目录下的 profile（优先同名 `<ipa_stem>.mobileprovision`）
+  - 若存在多个候选 profile，交互模式会列出候选供选择
 - `-e, --entitlements` - 自定义 entitlements.plist 文件（可选）
 - `--main-app-name` - 当 Payload 下有多个 `.app` 时，指定主应用（如 `MyApp.app`）
 - `--strict-entitlements` - 严格校验 entitlements 必需标识（缺失会报错）
@@ -91,6 +96,8 @@ ipa-toolkit -i INPUT.ipa -s "SIGN_IDENTITY" [选项]
 - `-d, --display-name` - 新的显示名称（CFBundleDisplayName）
 - `--keep-temp` - 保留临时工作目录（用于调试）
 - `--verbose` - 显示详细日志
+
+命令执行时会输出关键阶段进度（如解析输入、解析 profile、解析签名身份、开始重签名）。
 
 ### 高级用法 - Info.plist 编辑
 
@@ -167,7 +174,9 @@ ipa-toolkit -i Production.ipa -o Testing.ipa \
 
 ## 前置条件
 
-### 获取代码签名身份
+### 获取代码签名身份（可选）
+
+如果你传了 `-p`，工具会优先根据 profile 自动推导 `-s`，通常不需要手动执行下列命令。
 
 ```bash
 security find-identity -v -p codesigning

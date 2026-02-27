@@ -6,9 +6,11 @@
 
 import argparse
 import os
+import sys
 from collections.abc import Sequence
 
 from .ipa import resign_ipa
+from .provisioning import load_mobileprovision, resolve_sign_identity_from_profile
 from .types import Op
 
 
@@ -99,6 +101,98 @@ def _parse_ops(ns: argparse.Namespace) -> list[Op]:
     return ops
 
 
+def _log_step(message: str) -> None:
+    """输出简洁的流程阶段提示。"""
+    print(f"[ipa-toolkit] {message}")
+
+
+def _choose_candidate(
+    *,
+    kind: str,
+    candidates: list[str],
+    required_flag: str,
+    context: str,
+) -> str:
+    """当候选有多个时，交互式让用户选择；非交互环境则报错。"""
+    ordered = sorted(os.path.abspath(x) for x in candidates)
+    if not sys.stdin.isatty():
+        names = ", ".join(os.path.basename(x) for x in ordered)
+        raise SystemExit(
+            f"Error: multiple {kind} found {context} in non-interactive mode.\n"
+            f"Candidates: {names}\n"
+            f"Please pass the desired one via {required_flag}.\n"
+        )
+
+    print(f"Multiple {kind} found {context}. Please choose one:")
+    for i, path in enumerate(ordered, start=1):
+        print(f"  {i}) {path}")
+
+    while True:
+        raw = input(f"Select {kind} [1-{len(ordered)}]: ").strip()
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= len(ordered):
+                selected = ordered[idx - 1]
+                print(f"Selected {kind}: {selected}")
+                return selected
+        print("Invalid selection. Please enter a valid number.")
+
+
+def _find_profile_near_input(input_ipa: str) -> str:
+    """在输入 IPA 同级目录自动发现 profile。"""
+    parent = os.path.dirname(input_ipa)
+    stem = os.path.splitext(os.path.basename(input_ipa))[0]
+
+    candidates: list[str] = []
+    preferred = os.path.join(parent, f"{stem}.mobileprovision")
+    if os.path.isfile(preferred):
+        return preferred
+
+    with os.scandir(parent) as it:
+        for entry in it:
+            if not entry.is_file():
+                continue
+            if entry.name.lower().endswith(".mobileprovision"):
+                candidates.append(entry.path)
+
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        return _choose_candidate(
+            kind="provisioning profiles",
+            candidates=candidates,
+            required_flag="-p/--profile",
+            context=f"next to input ipa ({os.path.basename(input_ipa)})",
+        )
+    return ""
+
+
+def _find_input_ipa_in_cwd() -> str:
+    """在当前工作目录自动发现输入 IPA。"""
+    cwd = os.getcwd()
+    candidates: list[str] = []
+    with os.scandir(cwd) as it:
+        for entry in it:
+            if not entry.is_file():
+                continue
+            if entry.name.lower().endswith(".ipa"):
+                candidates.append(entry.path)
+
+    if len(candidates) == 1:
+        return os.path.abspath(candidates[0])
+    if len(candidates) > 1:
+        return _choose_candidate(
+            kind=".ipa files",
+            candidates=candidates,
+            required_flag="-i/--input",
+            context="in current directory",
+        )
+    raise SystemExit(
+        "Error: missing -i/--input and no .ipa file found in current directory.\n"
+        "Hint: pass input ipa path via -i.\n"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建并返回 `ipa-toolkit` 命令行参数解析器。"""
     p = argparse.ArgumentParser(
@@ -111,7 +205,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    p.add_argument("-i", "--input", required=True, help="Input .ipa path")
+    p.add_argument("-i", "--input", default="", help="Input .ipa path")
     p.add_argument(
         "-o",
         "--output",
@@ -188,37 +282,66 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     ns = parser.parse_args(argv)
 
-    if not (ns.sign_identity or "").strip():
-        raise SystemExit(
-            "Error: missing -s/--sign-identity.\n"
-            "Hint: list available codesigning identities with:\n"
-            "  security find-identity -v -p codesigning\n"
-            "Then pass one of the shown names via -s.\n"
-        )
-
     ops = _parse_ops(ns)
 
     def _abs(p: str) -> str:
         """将输入路径展开为绝对路径，统一后续文件校验逻辑。"""
         return os.path.abspath(os.path.expanduser(p))
 
-    input_ipa = _abs(ns.input)
-    if not os.path.isfile(input_ipa):
-        raise SystemExit(f"Error: ipa not found: {input_ipa}")
+    _log_step("Resolving input ipa")
+    if ns.input:
+        input_ipa = _abs(ns.input)
+        if not os.path.isfile(input_ipa):
+            raise SystemExit(f"Error: ipa not found: {input_ipa}")
+        _log_step(f"Using input ipa: {input_ipa}")
+    else:
+        input_ipa = _find_input_ipa_in_cwd()
+        _log_step(f"Auto input ipa: {input_ipa}")
 
+    _log_step("Resolving output ipa")
     output_ipa = _abs(ns.output) if ns.output else ""
     if not output_ipa:
         base = os.path.basename(input_ipa)
         stem = base[:-4] if base.lower().endswith(".ipa") else base
         output_ipa = os.path.join(os.path.dirname(input_ipa), f"{stem}.resigned.ipa")
+    _log_step(f"Output ipa: {output_ipa}")
 
-    profile = _abs(ns.profile) if ns.profile else ""
+    _log_step("Resolving provisioning profile")
+    profile = _abs(ns.profile) if ns.profile else _find_profile_near_input(input_ipa)
+    if profile:
+        src = "provided" if ns.profile else "auto"
+        _log_step(f"Using {src} profile: {profile}")
+    else:
+        _log_step("No profile selected")
+
     entitlements = _abs(ns.entitlements) if ns.entitlements else ""
+    sign_identity = (ns.sign_identity or "").strip()
 
+    _log_step("Resolving sign identity")
+    if not sign_identity:
+        if not profile:
+            raise SystemExit(
+                "Error: missing -s/--sign-identity.\n"
+                "Hint: pass -s explicitly, or provide/auto-detect -p profile "
+                "so identity can be inferred.\n"
+            )
+        try:
+            sign_identity = resolve_sign_identity_from_profile(load_mobileprovision(profile))
+        except RuntimeError as e:
+            raise SystemExit(
+                "Error: failed to infer sign identity from provisioning profile.\n"
+                f"Detail: {e}\n"
+                "Hint: pass -s explicitly.\n"
+            ) from e
+        _log_step(f"Auto sign identity: {sign_identity}")
+    else:
+        _log_step(f"Using provided sign identity: {sign_identity}")
+
+    _log_step("Starting re-sign pipeline")
     resign_ipa(
         input_ipa=input_ipa,
         output_ipa=output_ipa,
-        sign_identity=ns.sign_identity,
+        sign_identity=sign_identity,
         profile_path=profile,
         entitlements_path=entitlements,
         main_app_name=ns.main_app_name or "",
