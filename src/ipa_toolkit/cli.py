@@ -242,6 +242,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail when required entitlements identifiers are missing",
     )
     p.add_argument(
+        "--auto-rewrite-bundle-id-values",
+        action="store_true",
+        help="Auto rewrite bundle-id-like string values in Info.plist when using -b",
+    )
+    p.add_argument(
         "--keep-temp",
         action="store_true",
         help="Keep temporary working directory (prints its path at the end)",
@@ -353,5 +358,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         new_build=ns.build or "",
         new_display_name=ns.display_name or "",
         ops=ops,
+        auto_rewrite_bundle_id_values=bool(ns.auto_rewrite_bundle_id_values),
     )
     return 0

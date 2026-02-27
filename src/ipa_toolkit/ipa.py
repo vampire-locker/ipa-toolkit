@@ -26,7 +26,11 @@ from .plist_edit import (
     load_plist,
     save_plist_binary,
 )
-from .plist_ops import apply_ops
+from .plist_ops import (
+    apply_ops,
+    rewrite_bundle_id_in_url_types,
+    rewrite_bundle_id_strings,
+)
 from .provisioning import ProvisioningProfile, load_mobileprovision
 from .types import Op
 
@@ -47,6 +51,7 @@ def resign_ipa(
     new_build: str,
     new_display_name: str,
     ops: Sequence[Op],
+    auto_rewrite_bundle_id_values: bool = False,
 ) -> None:
     """对外入口：校验输入并在临时目录内执行完整重签名流程。"""
     # 供 CLI 调用的公开入口，具体执行逻辑在 `_resign_ipa_in_tempdir`。
@@ -81,6 +86,7 @@ def resign_ipa(
                     new_build=new_build,
                     new_display_name=new_display_name,
                     ops=ops,
+                    auto_rewrite_bundle_id_values=auto_rewrite_bundle_id_values,
                 )
                 return
 
@@ -101,6 +107,7 @@ def resign_ipa(
             new_build=new_build,
             new_display_name=new_display_name,
             ops=ops,
+            auto_rewrite_bundle_id_values=auto_rewrite_bundle_id_values,
         )
     except Exception:
         if keep_temp and td:
@@ -129,6 +136,7 @@ def _resign_ipa_in_tempdir(
     new_build: str,
     new_display_name: str,
     ops: Sequence[Op],
+    auto_rewrite_bundle_id_values: bool,
 ) -> None:
     """在已准备好的临时目录中执行解包、修改、签名与回包。"""
     # 先解压到 `<temp>/unzipped`，后续可完整回包所有顶层目录。
@@ -185,6 +193,24 @@ def _resign_ipa_in_tempdir(
 
         new_id = bundle_new_id_for(old_id, old_main_id, new_bundle_id)
         bundle_ids[b] = (old_id, new_id)
+
+        if new_bundle_id and new_id != old_id:
+            url_type_replaced = rewrite_bundle_id_in_url_types(
+                plist_obj,
+                old_id=old_id,
+                new_id=new_id,
+            )
+            if verbose and url_type_replaced:
+                print(f"Rewrote {url_type_replaced} URLTypes bundle-id value(s): {info_path}")
+
+        if auto_rewrite_bundle_id_values and new_bundle_id and new_id != old_id:
+            replaced_count = rewrite_bundle_id_strings(
+                plist_obj,
+                old_id=old_id,
+                new_id=new_id,
+            )
+            if verbose and replaced_count:
+                print(f"Rewrote {replaced_count} bundle-id string(s): {info_path}")
 
         if new_bundle_id and new_id != old_id:
             plist_obj["CFBundleIdentifier"] = new_id

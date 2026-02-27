@@ -6,6 +6,8 @@
 
 - ✅ **重新签名** - 使用新的代码签名身份对 iOS 应用进行签名
 - ✅ **修改 Bundle ID** - 自动处理主应用和扩展的包标识符
+- ✅ **URL Types 自动同步** - 使用 `-b` 时默认同步 `CFBundleURLName/CFBundleURLSchemes`
+- ✅ **自动重写 Bundle ID 字符串** - 可选同步更新 Info.plist 里其它 bundle-id-like 字符串值
 - ✅ **更新版本信息** - 修改版本号（CFBundleShortVersionString）和构建号（CFBundleVersion）
 - ✅ **更改显示名称** - 修改应用在主屏幕上显示的名称
 - ✅ **嵌入描述文件** - 安装新的 provisioning profile
@@ -90,7 +92,8 @@ ipa-toolkit [-i INPUT.ipa] [-s "SIGN_IDENTITY"] [-p profile.mobileprovision] [�
 - `-e, --entitlements` - 自定义 entitlements.plist 文件（可选）
 - `--main-app-name` - 当 Payload 下有多个 `.app` 时，指定主应用（如 `MyApp.app`）
 - `--strict-entitlements` - 严格校验 entitlements 必需标识（缺失会报错）
-- `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展）
+- `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展，并默认同步 URL Types）
+- `--auto-rewrite-bundle-id-values` - 配合 `-b` 使用，自动重写 Info.plist 中“看起来像 bundle id”的字符串值
 - `-v, --version` - 新的版本号（CFBundleShortVersionString）
 - `-n, --build` - 新的构建号（CFBundleVersion）
 - `-d, --display-name` - 新的显示名称（CFBundleDisplayName）
@@ -204,6 +207,8 @@ Profile 通常位于 `~/Library/MobileDevice/Provisioning Profiles/`
 - 修改主应用 Bundle ID 时，扩展会自动前缀替换：
   - `com.old.app` → `com.new.app`
   - `com.old.app.share` → `com.new.app.share`
+- `CFBundleURLTypes` 中与 bundle id 对应的 `CFBundleURLName/CFBundleURLSchemes` 会默认同步
+- 若要自动同步 Info.plist 其它字段中的 bundle id 字符串，可加 `--auto-rewrite-bundle-id-values`
 
 ## 工作原理
 

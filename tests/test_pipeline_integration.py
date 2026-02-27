@@ -17,6 +17,12 @@ def _create_minimal_ipa(ipa_path: Path) -> None:
                     "CFBundlePackageType": "APPL",
                     "CFBundleShortVersionString": "1.0",
                     "CFBundleVersion": "1",
+                    "CFBundleURLTypes": [
+                        {
+                            "CFBundleURLName": "com.old.app",
+                            "CFBundleURLSchemes": ["com.old.app", "myapp"],
+                        }
+                    ],
                 }
             ),
         )
@@ -26,6 +32,11 @@ def _create_minimal_ipa(ipa_path: Path) -> None:
                 {
                     "CFBundleIdentifier": "com.old.app.share",
                     "CFBundlePackageType": "XPC!",
+                    "CFBundleURLTypes": [
+                        {
+                            "CFBundleURLSchemes": ["com.old.app.share", "sharetool"],
+                        }
+                    ],
                 }
             ),
         )
@@ -92,6 +103,9 @@ def test_resign_pipeline_updates_ids_and_keeps_top_level_items(monkeypatch, tmp_
     assert main_plist["CFBundleDisplayName"] == "NewName"
     assert main_plist["CFBundleName"] == "NewName"
     assert main_plist["A"]["B"] == "v"
+    assert main_plist["CFBundleURLTypes"][0]["CFBundleURLName"] == "com.new.app"
+    assert main_plist["CFBundleURLTypes"][0]["CFBundleURLSchemes"][0] == "com.new.app"
+    assert ext_plist["CFBundleURLTypes"][0]["CFBundleURLSchemes"][0] == "com.new.app.share"
 
     assert verified
     assert any(path.endswith("Main.app") for path, _ in signed)
@@ -140,3 +154,59 @@ def test_resign_pipeline_embeds_profile_when_provided(monkeypatch, tmp_path) -> 
     with zipfile.ZipFile(output_ipa, "r") as zf:
         assert "Payload/Main.app/embedded.mobileprovision" in zf.namelist()
         assert zf.read("Payload/Main.app/embedded.mobileprovision") == b"profile-data"
+
+
+def test_resign_pipeline_auto_rewrites_bundle_id_like_plist_values(monkeypatch, tmp_path) -> None:
+    input_ipa = tmp_path / "input.ipa"
+    output_ipa = tmp_path / "output.ipa"
+    with zipfile.ZipFile(input_ipa, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "Payload/Main.app/Info.plist",
+            plistlib.dumps(
+                {
+                    "CFBundleIdentifier": "com.old.app",
+                    "CFBundlePackageType": "APPL",
+                    "WKCompanionAppBundleIdentifier": "com.old.app.watch",
+                    "AlreadyNew": "com.new.app.watch",
+                    "Mixed": ["com.old.app", "prefix.com.old.app", {"Deep": "com.old.app.ext"}],
+                }
+            ),
+        )
+
+    monkeypatch.setattr(ipa_mod.codesign, "remove_signature", lambda _p: None)
+    monkeypatch.setattr(ipa_mod.codesign, "sign", lambda _p, _i, entitlements_path=None: None)
+    monkeypatch.setattr(ipa_mod.codesign, "verify", lambda _p: None)
+    monkeypatch.setattr(ipa_mod.codesign, "extract_entitlements", lambda _p: None)
+    monkeypatch.setattr(
+        ipa_mod.codesign,
+        "write_entitlements",
+        lambda _e: str(tmp_path / "ents.plist"),
+    )
+
+    ipa_mod.resign_ipa(
+        input_ipa=str(input_ipa),
+        output_ipa=str(output_ipa),
+        sign_identity="IDENTITY",
+        profile_path="",
+        entitlements_path="",
+        main_app_name="",
+        strict_entitlements=False,
+        keep_temp=False,
+        verbose=False,
+        new_bundle_id="com.new.app",
+        new_version="",
+        new_build="",
+        new_display_name="",
+        ops=[],
+        auto_rewrite_bundle_id_values=True,
+    )
+
+    with zipfile.ZipFile(output_ipa, "r") as zf:
+        main_plist = plistlib.loads(zf.read("Payload/Main.app/Info.plist"))
+
+    assert main_plist["CFBundleIdentifier"] == "com.new.app"
+    assert main_plist["WKCompanionAppBundleIdentifier"] == "com.new.app.watch"
+    assert main_plist["AlreadyNew"] == "com.new.app.watch"
+    assert main_plist["Mixed"][0] == "com.new.app"
+    assert main_plist["Mixed"][1] == "prefix.com.old.app"
+    assert main_plist["Mixed"][2]["Deep"] == "com.new.app.ext"

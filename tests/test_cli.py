@@ -157,3 +157,22 @@ def test_main_errors_when_no_input_ipa_in_cwd(monkeypatch, tmp_path) -> None:
     with pytest.raises(SystemExit) as e:
         cli.main(["-s", "IDENTITY"])
     assert "no .ipa file found in current directory" in str(e.value)
+
+
+def test_main_passes_auto_rewrite_bundle_id_values_flag(monkeypatch, tmp_path) -> None:
+    ipa_path = tmp_path / "app.ipa"
+    _write_dummy_ipa(ipa_path)
+    captured: dict = {}
+    monkeypatch.setattr(cli, "resign_ipa", lambda **kwargs: captured.update(kwargs))
+
+    rc = cli.main(
+        [
+            "-i",
+            str(ipa_path),
+            "-s",
+            "IDENTITY",
+            "--auto-rewrite-bundle-id-values",
+        ]
+    )
+    assert rc == 0
+    assert captured["auto_rewrite_bundle_id_values"] is True
