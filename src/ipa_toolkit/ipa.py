@@ -270,6 +270,12 @@ def _resign_ipa_in_tempdir(
         print(f"  OldID : {old_main_id}")
         if new_bundle_id:
             print(f"  NewID : {new_bundle_id}")
+        if new_version:
+            print(f"  Ver   : {new_version}")
+        if new_build:
+            print(f"  Build : {new_build}")
+        if new_display_name:
+            print(f"  Name  : {new_display_name}")
         print(f"  Bundles scanned             : {len(bundles)}")
         print(f"  Bundle identifiers to change: {changed_bundle_ids}")
         print(f"  URLTypes entries to rewrite : {changed_url_types}")

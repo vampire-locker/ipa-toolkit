@@ -212,7 +212,9 @@ def test_resign_pipeline_auto_rewrites_bundle_id_like_plist_values(monkeypatch, 
     assert main_plist["Mixed"][2]["Deep"] == "com.new.app.ext"
 
 
-def test_resign_pipeline_dry_run_does_not_sign_or_write_output(monkeypatch, tmp_path) -> None:
+def test_resign_pipeline_dry_run_does_not_sign_or_write_output(
+    monkeypatch, tmp_path, capsys
+) -> None:
     input_ipa = tmp_path / "input.ipa"
     output_ipa = tmp_path / "output.ipa"
     _create_minimal_ipa(input_ipa)
@@ -252,13 +254,17 @@ def test_resign_pipeline_dry_run_does_not_sign_or_write_output(monkeypatch, tmp_
         keep_temp=False,
         verbose=False,
         new_bundle_id="com.new.app",
-        new_version="",
-        new_build="",
-        new_display_name="",
+        new_version="1.0.6",
+        new_build="100",
+        new_display_name="DemoName",
         ops=[],
         dry_run=True,
     )
 
+    out = capsys.readouterr().out
+    assert "Ver   : 1.0.6" in out
+    assert "Build : 100" in out
+    assert "Name  : DemoName" in out
     assert output_ipa.exists() is False
     assert called["remove"] is False
     assert called["sign"] is False
