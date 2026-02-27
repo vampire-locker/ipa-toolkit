@@ -210,3 +210,56 @@ def test_resign_pipeline_auto_rewrites_bundle_id_like_plist_values(monkeypatch, 
     assert main_plist["Mixed"][0] == "com.new.app"
     assert main_plist["Mixed"][1] == "prefix.com.old.app"
     assert main_plist["Mixed"][2]["Deep"] == "com.new.app.ext"
+
+
+def test_resign_pipeline_dry_run_does_not_sign_or_write_output(monkeypatch, tmp_path) -> None:
+    input_ipa = tmp_path / "input.ipa"
+    output_ipa = tmp_path / "output.ipa"
+    _create_minimal_ipa(input_ipa)
+
+    called = {"sign": False, "verify": False, "remove": False}
+
+    monkeypatch.setattr(
+        ipa_mod.codesign,
+        "remove_signature",
+        lambda _p: called.__setitem__("remove", True),
+    )
+    monkeypatch.setattr(
+        ipa_mod.codesign,
+        "sign",
+        lambda _p, _i, entitlements_path=None: called.__setitem__("sign", True),
+    )
+    monkeypatch.setattr(
+        ipa_mod.codesign,
+        "verify",
+        lambda _p: called.__setitem__("verify", True),
+    )
+    monkeypatch.setattr(ipa_mod.codesign, "extract_entitlements", lambda _p: None)
+    monkeypatch.setattr(
+        ipa_mod.codesign,
+        "write_entitlements",
+        lambda _e: str(tmp_path / "ents.plist"),
+    )
+
+    ipa_mod.resign_ipa(
+        input_ipa=str(input_ipa),
+        output_ipa=str(output_ipa),
+        sign_identity="IDENTITY",
+        profile_path="",
+        entitlements_path="",
+        main_app_name="",
+        strict_entitlements=False,
+        keep_temp=False,
+        verbose=False,
+        new_bundle_id="com.new.app",
+        new_version="",
+        new_build="",
+        new_display_name="",
+        ops=[],
+        dry_run=True,
+    )
+
+    assert output_ipa.exists() is False
+    assert called["remove"] is False
+    assert called["sign"] is False
+    assert called["verify"] is False

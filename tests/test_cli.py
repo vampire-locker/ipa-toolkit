@@ -209,3 +209,23 @@ def test_main_inspect_mode_skips_resign_and_sign_identity(monkeypatch, tmp_path)
     assert called["inspect"] is True
     assert called["print"] is True
     assert called["resign"] is False
+
+
+def test_main_passes_dry_run_flag(monkeypatch, tmp_path) -> None:
+    ipa_path = tmp_path / "app.ipa"
+    _write_dummy_ipa(ipa_path)
+    captured: dict = {}
+    monkeypatch.setattr(cli, "resign_ipa", lambda **kwargs: captured.update(kwargs))
+
+    rc = cli.main(["-i", str(ipa_path), "-s", "IDENTITY", "--dry-run"])
+    assert rc == 0
+    assert captured["dry_run"] is True
+
+
+def test_main_rejects_dry_run_with_inspect(tmp_path) -> None:
+    ipa_path = tmp_path / "app.ipa"
+    _write_dummy_ipa(ipa_path)
+
+    with pytest.raises(SystemExit) as e:
+        cli.main(["-i", str(ipa_path), "--inspect", "--dry-run"])
+    assert "--inspect and --dry-run cannot be used together" in str(e.value)

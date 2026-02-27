@@ -17,6 +17,7 @@
 - ✅ **完整保留** - 保留 IPA 中的所有内容（Payload、Symbols、SwiftSupport 等）
 - ✅ **递归签名** - 自动处理 frameworks、extensions、XPC services
 - ✅ **只读查看 IPA 信息** - 一条命令输出主应用/版本/当前签名/URL Schemes/扩展等关键信息
+- ✅ **重签预演（dry-run）** - 预览将修改的内容与签名参数，不落盘不打包
 
 ## 系统要求
 
@@ -61,13 +62,19 @@ python3 -m ipa_toolkit -h
 ipa-toolkit -i app.ipa --inspect
 ```
 
-2) 只重签，不改 Bundle ID/版本（最常见）：
+2) 预演重签（推荐先检查参数与改动）：
+
+```bash
+ipa-toolkit -i app.ipa -s "Apple Distribution: Your Company (TEAMID)" -p profile.mobileprovision --dry-run
+```
+
+3) 只重签，不改 Bundle ID/版本（最常见）：
 
 ```bash
 ipa-toolkit -i app.ipa -s "Apple Distribution: Your Company (TEAMID)" -p profile.mobileprovision
 ```
 
-3) 需要改 Bundle ID 时再加 `-b`：
+4) 需要改 Bundle ID 时再加 `-b`：
 
 ```bash
 ipa-toolkit -i app.ipa -s "Apple Distribution: Your Company (TEAMID)" -p profile.mobileprovision \
@@ -97,6 +104,12 @@ ipa-toolkit -i app.ipa -o app-resigned.ipa \
 
 ```bash
 ipa-toolkit -i app.ipa --inspect
+```
+
+预演重签（不修改文件，不输出 ipa）：
+
+```bash
+ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision --dry-run
 ```
 
 ## 术语速查（新手版）
@@ -129,6 +142,7 @@ ipa-toolkit [-i INPUT.ipa] --inspect [--main-app-name APP_NAME]
 - `-p, --profile` - provisioning profile；未传 `-s` 时可自动从 profile 推导
 - `-s` 和 `-p` 也可以都不传：工具会尝试自动发现 profile 并推导签名身份（失败时再提示你显式指定）
 - 使用 `--inspect` 时不会进入重签流程，签名参数会被忽略
+- `--dry-run` 会进入重签预演流程，读取并校验但不修改文件
 
 **常用选项：**
 
@@ -144,6 +158,8 @@ ipa-toolkit [-i INPUT.ipa] --inspect [--main-app-name APP_NAME]
 - `--strict-entitlements` - 严格校验 entitlements 必需标识（缺失会报错）
 - `--inspect` - 仅查看 IPA 关键信息（不重签、不修改，不需要 `-s/-p`）
   - 输出包含当前签名状态、签名 Identifier/TeamID/Authority（可解析时）
+- `--dry-run` - 预演重签流程（不修改文件，不输出 ipa）
+  - 输出将变更的 Bundle ID/URLTypes/自定义操作摘要与签名参数
 - `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展，并默认同步 URL Types）
 - `--auto-rewrite-bundle-id-values` - 配合 `-b` 使用，自动重写 Info.plist 中“看起来像 bundle id”的字符串值
 - `-v, --version` - 新的版本号（CFBundleShortVersionString）
@@ -179,6 +195,12 @@ ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision -b com.new.app
 ```bash
 ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision \
   -b com.new.app --auto-rewrite-bundle-id-values
+```
+
+先预演再执行：
+
+```bash
+ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision -b com.new.app --dry-run
 ```
 
 ### 高级用法 - Info.plist 编辑

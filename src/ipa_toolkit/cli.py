@@ -248,6 +248,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only inspect and print ipa key info without re-signing or modifying",
     )
     p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview re-sign changes without modifying files or creating output ipa",
+    )
+    p.add_argument(
         "--auto-rewrite-bundle-id-values",
         action="store_true",
         help="Auto rewrite bundle-id-like string values in Info.plist when using -b",
@@ -292,6 +297,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """CLI 入口：解析参数、校验输入并调用重签名主流程。"""
     parser = build_parser()
     ns = parser.parse_args(argv)
+    if ns.inspect and ns.dry_run:
+        raise SystemExit("Error: --inspect and --dry-run cannot be used together.")
 
     ops = _parse_ops(ns)
 
@@ -354,6 +361,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         _log_step(f"Using provided sign identity: {sign_identity}")
 
+    if ns.dry_run:
+        _log_step("Dry-run mode enabled (no file modifications)")
     _log_step("Starting re-sign pipeline")
     resign_ipa(
         input_ipa=input_ipa,
@@ -371,5 +380,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         new_display_name=ns.display_name or "",
         ops=ops,
         auto_rewrite_bundle_id_values=bool(ns.auto_rewrite_bundle_id_values),
+        dry_run=bool(ns.dry_run),
     )
     return 0

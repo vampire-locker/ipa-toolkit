@@ -52,6 +52,7 @@ def resign_ipa(
     new_display_name: str,
     ops: Sequence[Op],
     auto_rewrite_bundle_id_values: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """对外入口：校验输入并在临时目录内执行完整重签名流程。"""
     # 供 CLI 调用的公开入口，具体执行逻辑在 `_resign_ipa_in_tempdir`。
@@ -87,6 +88,7 @@ def resign_ipa(
                     new_display_name=new_display_name,
                     ops=ops,
                     auto_rewrite_bundle_id_values=auto_rewrite_bundle_id_values,
+                    dry_run=dry_run,
                 )
                 return
 
@@ -108,6 +110,7 @@ def resign_ipa(
             new_display_name=new_display_name,
             ops=ops,
             auto_rewrite_bundle_id_values=auto_rewrite_bundle_id_values,
+            dry_run=dry_run,
         )
     except Exception:
         if keep_temp and td:
@@ -137,6 +140,7 @@ def _resign_ipa_in_tempdir(
     new_display_name: str,
     ops: Sequence[Op],
     auto_rewrite_bundle_id_values: bool,
+    dry_run: bool,
 ) -> None:
     """在已准备好的临时目录中执行解包、修改、签名与回包。"""
     # 先解压到 `<temp>/unzipped`，后续可完整回包所有顶层目录。
@@ -173,6 +177,9 @@ def _resign_ipa_in_tempdir(
 
     # 记录应用包路径到 `(old_id, new_id)` 的映射关系。
     bundle_ids: dict[str, tuple[str, str]] = {}
+    changed_bundle_ids = 0
+    changed_url_types = 0
+    changed_general_bundle_strings = 0
 
     # 对每个应用包执行 Info.plist 修改。
     ops_all = [o for o in ops if o.scope == "all"]
@@ -200,6 +207,7 @@ def _resign_ipa_in_tempdir(
                 old_id=old_id,
                 new_id=new_id,
             )
+            changed_url_types += url_type_replaced
             if verbose and url_type_replaced:
                 print(f"Rewrote {url_type_replaced} URLTypes bundle-id value(s): {info_path}")
 
@@ -209,10 +217,12 @@ def _resign_ipa_in_tempdir(
                 old_id=old_id,
                 new_id=new_id,
             )
+            changed_general_bundle_strings += replaced_count
             if verbose and replaced_count:
                 print(f"Rewrote {replaced_count} bundle-id string(s): {info_path}")
 
         if new_bundle_id and new_id != old_id:
+            changed_bundle_ids += 1
             plist_obj["CFBundleIdentifier"] = new_id
         if new_version:
             plist_obj["CFBundleShortVersionString"] = new_version
@@ -228,10 +238,11 @@ def _resign_ipa_in_tempdir(
         else:
             apply_ops(plist_obj, ops_ext)
 
-        save_plist_binary(info_path, plist_obj)
+        if not dry_run:
+            save_plist_binary(info_path, plist_obj)
 
     # 向主应用注入描述文件。
-    if profile_path:
+    if profile_path and not dry_run:
         shutil.copyfile(profile_path, os.path.join(app_path, "embedded.mobileprovision"))
 
     # 为每个应用包准备签名权限。
@@ -250,6 +261,30 @@ def _resign_ipa_in_tempdir(
         extract_entitlements=codesign.extract_entitlements,
         require_app_identifier=strict_entitlements,
     )
+
+    if dry_run:
+        print("Dry run:")
+        print(f"  Input : {input_ipa}")
+        print(f"  Output: {output_ipa}")
+        print(f"  App   : {os.path.basename(app_path)}")
+        print(f"  OldID : {old_main_id}")
+        if new_bundle_id:
+            print(f"  NewID : {new_bundle_id}")
+        print(f"  Bundles scanned             : {len(bundles)}")
+        print(f"  Bundle identifiers to change: {changed_bundle_ids}")
+        print(f"  URLTypes entries to rewrite : {changed_url_types}")
+        if auto_rewrite_bundle_id_values:
+            print(f"  Extra string rewrites       : {changed_general_bundle_strings}")
+        if profile_path:
+            print(f"  Embed profile               : yes ({profile_path})")
+        else:
+            print("  Embed profile               : no")
+        print(f"  Sign identity               : {sign_identity}")
+        print(f"  Entitlements prepared       : {len(ent_by_bundle)} bundle(s)")
+        if ops:
+            print(f"  Custom plist ops            : {len(ops)}")
+        print("  Note                        : no files were modified")
+        return
 
     # 从主应用开始递归签名所有组件。
     sign_bundle_recursive(
