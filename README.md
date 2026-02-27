@@ -51,6 +51,31 @@ ipa-toolkit -h
 python3 -m ipa_toolkit -h
 ```
 
+## 新手先看（5 分钟上手）
+
+如果你第一次接触 iOS 重签名，按下面顺序走最稳：
+
+1) 先看包信息（不改包）：
+
+```bash
+ipa-toolkit -i app.ipa --inspect
+```
+
+2) 只重签，不改 Bundle ID/版本（最常见）：
+
+```bash
+ipa-toolkit -i app.ipa -s "Apple Distribution: Your Company (TEAMID)" -p profile.mobileprovision
+```
+
+3) 需要改 Bundle ID 时再加 `-b`：
+
+```bash
+ipa-toolkit -i app.ipa -s "Apple Distribution: Your Company (TEAMID)" -p profile.mobileprovision \
+  -b com.example.newapp
+```
+
+建议：先跑通第 2 步确认能安装，再逐步加其它参数（版本号、显示名、自定义 plist 修改）。
+
 ## 快速开始
 
 只重新签名：
@@ -74,18 +99,36 @@ ipa-toolkit -i app.ipa -o app-resigned.ipa \
 ipa-toolkit -i app.ipa --inspect
 ```
 
+## 术语速查（新手版）
+
+- `IPA`：iOS 安装包，本质是 zip。
+- `Bundle ID`：应用唯一标识（如 `com.company.app`）。
+- `签名身份(-s)`：你钥匙串里的证书身份，用于 `codesign`。
+- `Provisioning Profile(-p)`：描述可安装范围和权限的配置文件（`.mobileprovision`）。
+- `Entitlements`：应用权限声明（如推送、Keychain、Associated Domains）。
+
 ## 使用指南
 
 ### 基本用法
+
+重签模式：
 
 ```bash
 ipa-toolkit [-i INPUT.ipa] [-s "SIGN_IDENTITY"] [-p profile.mobileprovision] [选项]
 ```
 
-**签名参数（至少满足一种）：**
+只读查看模式：
+
+```bash
+ipa-toolkit [-i INPUT.ipa] --inspect [--main-app-name APP_NAME]
+```
+
+**签名参数（可选，支持自动发现）：**
 
 - `-s, --sign-identity` - 代码签名身份名称
 - `-p, --profile` - provisioning profile；未传 `-s` 时可自动从 profile 推导
+- `-s` 和 `-p` 也可以都不传：工具会尝试自动发现 profile 并推导签名身份（失败时再提示你显式指定）
+- 使用 `--inspect` 时不会进入重签流程，签名参数会被忽略
 
 **常用选项：**
 
@@ -110,6 +153,33 @@ ipa-toolkit [-i INPUT.ipa] [-s "SIGN_IDENTITY"] [-p profile.mobileprovision] [�
 - `--verbose` - 显示详细日志
 
 命令执行时会输出关键阶段进度（如解析输入、解析 profile、解析签名身份、开始重签名）。
+
+### 常见场景选命令
+
+仅查看包信息：
+
+```bash
+ipa-toolkit -i app.ipa --inspect
+```
+
+只重签（不改任何字段）：
+
+```bash
+ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision
+```
+
+改 Bundle ID 并自动同步 URL Types：
+
+```bash
+ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision -b com.new.app
+```
+
+改 Bundle ID 并尽量同步 Info.plist 里其它 bundle-id-like 字符串：
+
+```bash
+ipa-toolkit -i app.ipa -s "IDENTITY" -p profile.mobileprovision \
+  -b com.new.app --auto-rewrite-bundle-id-values
+```
 
 ### 高级用法 - Info.plist 编辑
 
@@ -188,7 +258,8 @@ ipa-toolkit -i Production.ipa -o Testing.ipa \
 
 ### 获取代码签名身份（可选）
 
-如果你传了 `-p`，工具会优先根据 profile 自动推导 `-s`，通常不需要手动执行下列命令。
+如果你显式传了 `-p`，或者工具自动发现了 profile，
+都会优先根据 profile 自动推导 `-s`，通常不需要手动执行下列命令。
 
 ```bash
 security find-identity -v -p codesigning
@@ -312,6 +383,7 @@ ruff check src/
 ipa-toolkit/
 ├── src/ipa_toolkit/
 │   ├── cli.py           # 命令行接口
+│   ├── inspect.py       # IPA 只读信息查看（--inspect）
 │   ├── ipa.py           # 主处理流程
 │   ├── bundle_scan.py   # 主 app 和嵌套 bundle 发现
 │   ├── codesign.py      # 代码签名
@@ -322,6 +394,9 @@ ipa-toolkit/
 │   ├── plist_edit.py    # Plist 编辑
 │   └── plist_path.py    # 键路径解析
 └── tests/               # 单元测试
+    ├── test_cli.py      # CLI 行为测试
+    ├── test_inspect.py  # --inspect 模式测试
+    └── ...
 ```
 
 ## License
