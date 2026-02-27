@@ -9,6 +9,7 @@ import os
 import sys
 from collections.abc import Sequence
 
+from .inspect import inspect_ipa, print_ipa_info
 from .ipa import resign_ipa
 from .provisioning import load_mobileprovision, resolve_sign_identity_from_profile
 from .types import Op
@@ -242,6 +243,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail when required entitlements identifiers are missing",
     )
     p.add_argument(
+        "--inspect",
+        action="store_true",
+        help="Only inspect and print ipa key info without re-signing or modifying",
+    )
+    p.add_argument(
         "--auto-rewrite-bundle-id-values",
         action="store_true",
         help="Auto rewrite bundle-id-like string values in Info.plist when using -b",
@@ -302,6 +308,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         input_ipa = _find_input_ipa_in_cwd()
         _log_step(f"Auto input ipa: {input_ipa}")
+
+    if ns.inspect:
+        _log_step("Inspecting ipa metadata")
+        info = inspect_ipa(input_ipa, main_app_name=ns.main_app_name or "")
+        print_ipa_info(info)
+        return 0
 
     _log_step("Resolving output ipa")
     output_ipa = _abs(ns.output) if ns.output else ""

@@ -16,6 +16,7 @@
 - ✅ **作用域控制** - 可以只针对主应用或扩展进行修改
 - ✅ **完整保留** - 保留 IPA 中的所有内容（Payload、Symbols、SwiftSupport 等）
 - ✅ **递归签名** - 自动处理 frameworks、extensions、XPC services
+- ✅ **只读查看 IPA 信息** - 一条命令输出主应用/版本/URL Schemes/扩展等关键信息
 
 ## 系统要求
 
@@ -67,6 +68,12 @@ ipa-toolkit -i app.ipa -o app-resigned.ipa \
   -b com.newcompany.app -v 2.0.0 -n 100
 ```
 
+快速查看 IPA 关键信息（不重签、不修改）：
+
+```bash
+ipa-toolkit -i app.ipa --inspect
+```
+
 ## 使用指南
 
 ### 基本用法
@@ -92,6 +99,7 @@ ipa-toolkit [-i INPUT.ipa] [-s "SIGN_IDENTITY"] [-p profile.mobileprovision] [�
 - `-e, --entitlements` - 自定义 entitlements.plist 文件（可选）
 - `--main-app-name` - 当 Payload 下有多个 `.app` 时，指定主应用（如 `MyApp.app`）
 - `--strict-entitlements` - 严格校验 entitlements 必需标识（缺失会报错）
+- `--inspect` - 仅查看 IPA 关键信息（不重签、不修改，不需要 `-s/-p`）
 - `-b, --bundle-id` - 新的 Bundle ID（会自动处理扩展，并默认同步 URL Types）
 - `--auto-rewrite-bundle-id-values` - 配合 `-b` 使用，自动重写 Info.plist 中“看起来像 bundle id”的字符串值
 - `-v, --version` - 新的版本号（CFBundleShortVersionString）

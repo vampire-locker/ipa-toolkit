@@ -176,3 +176,36 @@ def test_main_passes_auto_rewrite_bundle_id_values_flag(monkeypatch, tmp_path) -
     )
     assert rc == 0
     assert captured["auto_rewrite_bundle_id_values"] is True
+
+
+def test_main_inspect_mode_skips_resign_and_sign_identity(monkeypatch, tmp_path) -> None:
+    ipa_path = tmp_path / "app.ipa"
+    _write_dummy_ipa(ipa_path)
+
+    called: dict = {"inspect": False, "print": False, "resign": False}
+
+    def fake_inspect(input_ipa: str, main_app_name: str = "") -> dict:
+        called["inspect"] = True
+        return {"input_ipa": input_ipa, "main_app_name": main_app_name}
+
+    monkeypatch.setattr(
+        cli,
+        "inspect_ipa",
+        fake_inspect,
+    )
+    monkeypatch.setattr(
+        cli,
+        "print_ipa_info",
+        lambda _info: called.__setitem__("print", True),
+    )
+    monkeypatch.setattr(
+        cli,
+        "resign_ipa",
+        lambda **_kwargs: called.__setitem__("resign", True),
+    )
+
+    rc = cli.main(["-i", str(ipa_path), "--inspect"])
+    assert rc == 0
+    assert called["inspect"] is True
+    assert called["print"] is True
+    assert called["resign"] is False
